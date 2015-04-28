@@ -1333,7 +1333,7 @@ private final class TNFA(char_t)
     alias TNFAFragment!(char_t)     frag_t;
     alias TNFAState!(char_t)        state_t;
     alias Predicate!(char_t)        predicate_t;
-    alias char_t[]                  string_t;
+    alias const(char_t)[]           string_t;
     alias CharRange!(char_t)        range_t;
     alias CharClass!(char_t)        cc_t;
 
@@ -2322,7 +2322,7 @@ private class TDFA(char_t)
     alias Predicate!(char_t)    predicate_t;
     alias CharRange!(char_t)    range_t;
     alias CharClass!(char_t)    charclass_t;
-    alias char_t[]              string_t;
+    alias const(char_t)[]       string_t;
 
     enum uint CURRENT_POSITION_REGISTER = ~0;
 
@@ -2367,21 +2367,6 @@ private class TDFA(char_t)
     {
         uint    tag,
                 index;
-
-        const int opCmp(ref const TagIndex o)
-        {
-            if (tag == o.tag && index == o.index)
-                return 0;
-            if (tag > o.tag)
-                return 1;
-            if (tag < o.tag)
-                return -1;
-            if (index > o.index)
-                return 1;
-            if (index < o.index)
-                return -1;
-            assert(0);
-        }
     }
 
     /* ********************************************************************************************
@@ -3718,13 +3703,13 @@ class RegExpT(char_t)
         debug(TangoRegex) {}
         else {
             static if ( is(char_t == dchar) ) {
-                scope tnfa_t tnfa_ = new tnfa_t(pattern_);
+                scope tnfa_t tnfa_ = new tnfa_t(pattern_.dup);
             }
             else {
                 scope tnfa_t tnfa_ = new tnfa_t(tango.text.convert.Utf.toString32(pattern_));
             }
         }
-       
+
         tnfa_.swapMatchingBracketSyntax = swapMBS;
         tnfa_.parse(unanchored);
         if ( printNFA ) {
@@ -3815,8 +3800,6 @@ class RegExpT(char_t)
             registers_[cmd.dst] = 0;
         }
 
-        tdfa_t.Transition* tp, tp_end;
-
         // DFA execution
         auto inp = input_[next_start_ .. $];
         auto s = tdfa_.start;
@@ -3870,7 +3853,7 @@ class RegExpT(char_t)
                     break;
             }
 
-            Ltrans_loop: for ( tp = &s.generic_transitions[0], tp_end = tp+s.generic_transitions.length;
+            Ltrans_loop: for ( tdfa_t.Transition* tp = &s.generic_transitions[0], tp_end = tp+s.generic_transitions.length;
                 tp < tp_end; ++tp )
             {
                 t = *tp;
