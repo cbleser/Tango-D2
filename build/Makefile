@@ -1,3 +1,17 @@
+export REPOROOT ?= $(shell git rev-parse --show-toplevel)
+
+ifdef DC
+COMPILER:=$(DC)
+CUSTOM_DC:=1
+endif
+
+ifndef OBJS_DIR
+export OBJS_DIR := $(REPOROOT)/objs/$(COMPILER)
+else
+export OBJS_DIR := $(REPOROOT)/objs/
+endif
+
+
 
 export PROJECT_NAME     = tango
 export AUTHOR           = Tango contributors
@@ -11,8 +25,19 @@ SOURCES                 = $(filter-out $(Filter), $(getSource))
 
 DDOCFILES               =
 
+
+
 # include some command
 include build/command.make
+
+# Configuration setting for unittest
+-include $(REPOROOT)/config.make
+
+ifeq ($(COMPILER),gdc)
+DCFLAGS:=-I$(REPOROOT)/unported -I$(REPOROOT)/tango
+# -I$(REPOROOT)/tango/core
+endif
+
 
 OBJECTS             = $(patsubst %.d,$(BUILD_PATH)$(PATH_SEP)%.o,        $(SOURCES))
 PICOBJECTS          = $(patsubst %.d,$(BUILD_PATH)$(PATH_SEP)%.pic.o,    $(SOURCES))
@@ -26,6 +51,11 @@ space +=
 
 stripBugfix = $(subst $(space),.,$(strip $(wordlist 1, 2, $(subst ., ,$(1)))))
 
+define MAKEWAY
+test -d $1 || mkdir -p $1
+endef
+
+
 define make-lib
 	$(AR) rcs $@ $^
 	$(RANLIB) $@
@@ -37,11 +67,20 @@ all: static-lib header plain-doc pkgfile-static
 all-shared: shared-lib header plain-doc pkgfile-shared
 	@echo ------------------ Building $^ done
 
+$(UNITTESTER): $(UNITTESTERSRC) static-lib
+	$(DC) $(UNITTESTFLAGS) $(UNITTESTERSRC) $(OUTPUT)$(UNITTESTERBIN)
+
 .PHONY : pkgfile
 .PHONY : plain-doc
 .PHONY : doc
 .PHONY : clean
 .PHONY : .FORCE
+
+ifdef REBUILD
+ifneq ($(REBUILD),no)
+FORCE_REBUILD:=.FORCE
+endif
+endif
 
 static-lib: $(STATIC_LIBNAME)
 
@@ -127,11 +166,12 @@ $(SHARED_LIBNAME): $(PICOBJECTS)
 	$(DC) -shared $(SONAME_FLAG) $@.$(MAJOR_VERSION) $(OUTPUT)$@.$(MAJOR_VERSION) $^
 
 # create object files
-$(BUILD_PATH)$(PATH_SEP)%.o : %.d .FORCE
+$(BUILD_PATH)$(PATH_SEP)%.o : %.d $(FORCE_REBUILD)
+	$(call MAKEWAY,$(@D))
 	$(DC) $(DCFLAGS) $(DCFLAGS_LINK) $(DCFLAGS_IMPORT) -c $< $(OUTPUT)$@
 
 # create shared object files
-$(BUILD_PATH)$(PATH_SEP)%.pic.o : %.d .FORCE
+$(BUILD_PATH)$(PATH_SEP)%.pic.o : %.d $(FORCE_REBUILD)
 	$(DC) $(DCFLAGS) $(DCFLAGS_LINK) $(FPIC) $(DCFLAGS_IMPORT) -c $< $(OUTPUT)$@
 
 # Generate Header files
@@ -147,7 +187,7 @@ $(DOC_PATH)$(PATH_SEP)%.html : %.d
 	$(DC) $(DCFLAGS) $(DCFLAGS_LINK) $(DCFLAGS_IMPORT) $(DVERSION)=TangoDoc -c $(NO_OBJ) $(DDOC_FLAGS) $< $(DF)$@
 
 ############# CLEAN #############
-clean: clean-objects clean-static-lib clean-plain-doc clean-header clean-pkgfile
+clean: clean-objects clean-static-lib clean-plain-doc clean-header clean-pkgfile clean-unittester
 	@echo ------------------ Cleaning $^ done
 
 clean-shared: clean-shared-objects clean-shared-lib
@@ -193,6 +233,9 @@ clean-geany-tag:
 clean-pkgfile:
 	$(RM) $(PKG_CONFIG_FILE)
 	@echo ------------------ Cleaning pkgfile done
+
+clean-unittester:
+	rm -f $(UNITTESTERBIN) $(UNITTESTERBIN).o
 
 ############# INSTALL #############
 
